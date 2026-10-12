@@ -1,0 +1,10 @@
+node_modules
+.next
+.env*.local
+.convex
+next-env.d.ts
+*.tsbuildinfo
+
+# secrets
+google-service-account.json
+*service-account*.json

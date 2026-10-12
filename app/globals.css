@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #09090b;
+  color: #e4e4e7;
+  font-feature-settings: "cv11", "ss01";
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

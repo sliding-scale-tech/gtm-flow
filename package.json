@@ -1,0 +1,40 @@
+{
+  "name": "gtm-flow",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "convex": "convex dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@langchain/core": "1.2.14",
+    "@langchain/google": "0.2.9",
+    "@langchain/langgraph": "1.4.18",
+    "convex": "^1.46.0",
+    "langchain": "1.5.15",
+    "next": "^16.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "postcss": "^8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
+  },
+  "overrides": {
+    "@langchain/langgraph": "1.4.18",
+    "@langchain/core": "1.2.14",
+    "@langchain/langgraph-sdk": "1.12.0",
+    "@langchain/langgraph-checkpoint": "1.1.5"
+  }
+}
