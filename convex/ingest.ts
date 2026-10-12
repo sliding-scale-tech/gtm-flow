@@ -4,8 +4,9 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, internalAction } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { CsvStream } from "./lib/csv";
+import type { Settings } from "./defaults";
 import { cleanRow } from "./lib/rules";
 import { clip } from "./lib/text";
 import { listCsvFiles, openCsv, openReviewsCsv } from "./providers/google";
@@ -40,47 +41,92 @@ export const driveFiles = action({
   },
 });
 
-/**
- * Free preview of a Drive file: total rows, rows passing the free cleaning, and how many of those are new
- * (not processed in an earlier run). Streams the file; no paid calls.
- */
+/** Place ids of every lead ever stored (paged, so no per-row lookups). ponytail: reads the whole leads table; add a slim placeIds table past ~100k leads. */
+async function loadSeen(ctx: ActionCtx): Promise<Set<string>> {
+  const seen = new Set<string>();
+  for (let cursor: string | null = null; ;) {
+    const p: { ids: string[]; cursor: string; done: boolean } = await ctx.runQuery(internal.pipeline.placeIdPage, { cursor });
+    p.ids.forEach((id) => seen.add(id));
+    if (p.done) break;
+    cursor = p.cursor;
+  }
+  return seen;
+}
+
+/** Streams one Drive CSV: total rows, rows passing the free cleaning, and how many of those are new. No paid calls. */
+type Preview = { rows: number; passing: number; buildings: number; alreadySeen: number; newLeads: number; dropped: Record<string, number> };
+async function previewFile(settings: Settings, driveFileId: string, seen: Set<string>): Promise<Preview> {
+  const { body } = await openCsv(driveFileId);
+  const parser = new CsvStream();
+  const decoder = new TextDecoder();
+  const reader = body.getReader();
+  let rows = 0, passing = 0, buildings = 0, alreadySeen = 0;
+  const reasons: Record<string, number> = {};
+  for (;;) {
+    const { value, done } = await reader.read();
+    const out = done ? [...parser.push(decoder.decode()), ...parser.end()] : parser.push(decoder.decode(value, { stream: true }));
+    for (const r of out) {
+      rows++;
+      const c = cleanRow({ name: r.name, category: r.category, open_state: r.open_state }, settings);
+      if (!c.ok) { const k = c.reason.split(":")[0]; reasons[k] = (reasons[k] ?? 0) + 1; continue; }
+      passing++;
+      if (c.isBuilding) buildings++;
+      if (seen.has((r.place_id || r.cid || `${r.name}|${r.phone}`).slice(0, 200))) alreadySeen++;
+    }
+    if (done) break;
+  }
+  return { rows, passing, buildings, alreadySeen, newLeads: passing - alreadySeen, dropped: reasons };
+}
+
+/** Free preview of one Drive file (New run page). */
 export const fileStats = action({
   args: { token: v.string(), driveFileId: v.string() },
-  handler: async (ctx, { token, driveFileId }) => {
+  handler: async (ctx, { token, driveFileId }): Promise<Preview> => {
     await ctx.runQuery(internal.auth.assert, { token });
-    const { settings } = await ctx.runQuery(internal.settings.config, {});
-    const { body } = await openCsv(driveFileId);
-    const parser = new CsvStream();
-    const decoder = new TextDecoder();
-    const reader = body.getReader();
-    let rows = 0, passing = 0, buildings = 0;
-    const reasons: Record<string, number> = {};
-    const ids: string[] = [];
-    for (;;) {
-      const { value, done } = await reader.read();
-      const out = done ? [...parser.push(decoder.decode()), ...parser.end()] : parser.push(decoder.decode(value, { stream: true }));
-      for (const r of out) {
-        rows++;
-        const c = cleanRow({ name: r.name, category: r.category, open_state: r.open_state }, settings);
-        if (!c.ok) { const k = c.reason.split(":")[0]; reasons[k] = (reasons[k] ?? 0) + 1; continue; }
-        passing++;
-        if (c.isBuilding) buildings++;
-        ids.push((r.place_id || r.cid || `${r.name}|${r.phone}`).slice(0, 200));
-      }
-      if (done) break;
+    const { settings }: { settings: Settings } = await ctx.runQuery(internal.settings.config, {});
+    return previewFile(settings, driveFileId, await loadSeen(ctx));
+  },
+});
+
+/** Costs page: preview EVERY Drive file in the background (a few minutes). Result lands in meta; the page shows it on Refresh. */
+export const startDriveScan = action({
+  args: { token: v.string() },
+  handler: async (ctx, { token }): Promise<void> => {
+    await ctx.runQuery(internal.auth.assert, { token });
+    const cur: { status: string; startedAt: number } | null = await ctx.runQuery(internal.costs.scanState, {});
+    if (cur?.status === "running" && Date.now() - cur.startedAt < 15 * 60 * 1000) throw new ConvexError("A scan is already running. Press Refresh in a minute.");
+    await ctx.runMutation(internal.costs.setScan, { value: { status: "running", startedAt: Date.now(), total: 0, done: 0, files: [] } });
+    await ctx.scheduler.runAfter(0, internal.ingest.runDriveScan, {});
+  },
+});
+
+export const runDriveScan = internalAction({
+  args: {},
+  handler: async (ctx): Promise<void> => {
+    const startedAt = Date.now();
+    const files: { name: string; rows: number; passing: number; seen: number; fresh: number }[] = [];
+    let total = 0;
+    const save = (status: string, extra: object = {}) => ctx.runMutation(internal.costs.setScan, { value: { status, startedAt, total, done: files.length, files, ...extra } });
+    try {
+      const list = (await listCsvFiles()).filter((f) => /\.csv$/i.test(f.name));
+      total = list.length;
+      const { settings }: { settings: Settings } = await ctx.runQuery(internal.settings.config, {});
+      const seen = await loadSeen(ctx);
+      await save("running");
+      let i = 0;
+      const worker = async () => {
+        while (i < list.length) {
+          const f = list[i++];
+          const s = await previewFile(settings, f.id, seen);
+          files.push({ name: f.name.replace(/\.csv$/i, ""), rows: s.rows, passing: s.passing, seen: s.alreadySeen, fresh: s.newLeads });
+          await save("running");
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      await save("done", { finishedAt: Date.now() });
+    } catch (e) {
+      await save("error", { error: (e instanceof Error ? e.message : String(e)).slice(0, 300) });
     }
-    // "Already processed": load every processed place id once (paged) and check in memory. One index lookup per
-    // CSV row (TX ≈ 31k) hit Convex's "too many system operations" limit and took minutes.
-    // ponytail: reads the whole leads table; fine up to ~100k+ leads, switch to a slim placeIds table beyond that.
-    const done = new Set<string>();
-    for (let cursor: string | null = null; ;) {
-      const p: { ids: string[]; cursor: string; done: boolean } = await ctx.runQuery(internal.pipeline.placeIdPage, { cursor });
-      p.ids.forEach((id) => done.add(id));
-      if (p.done) break;
-      cursor = p.cursor;
-    }
-    const alreadySeen = ids.filter((id) => done.has(id)).length;
-    return { rows, passing, buildings, alreadySeen, newLeads: passing - alreadySeen, dropped: reasons };
   },
 });
 

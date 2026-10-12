@@ -25,7 +25,7 @@ knowledge/index.md knowledge/kb/*.md      research passes (one per library/API)
 docs/superpowers/specs|plans/             approved spec + checklist
 app/                                       Next.js App Router pages
   layout.tsx providers.tsx globals.css
-  login/ page.tsx(overview) drive/ runs/[id]/ leads/ prompts/ settings/
+  login/ page.tsx(overview) drive/ runs/[id]/ leads/ costs/ prompts/ settings/
 components/                                small Tailwind UI pieces (Nav, Funnel, LeadDrawer, ui.tsx)
 lib/session.tsx                            client session token (localStorage) + hooks
 convex/
@@ -41,6 +41,7 @@ convex/
   ingest.ts ("use node")                   Drive file list + startRun (CSV parse → insertBatch)
   leads.ts                                 grid queries, drawer, override, re-run, Instantly campaigns/push, prompt test
   crons.ts
+  costs.ts lib/costModel.ts               Costs page backend (report query, Drive-scan state, one-time backfill) + pure cost model
   providers/  http.ts gemini.ts exa.ts email.ts (findymail/trykitt/instantly) google.ts — mocks inline, enabled by PIPELINE_MOCK=1
   lib/        csv.ts rules.ts text.ts cost.ts  (+ *.test.ts, pure, no Convex imports)
 ```

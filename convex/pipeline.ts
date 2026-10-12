@@ -109,7 +109,10 @@ export const apply = internalMutation({
       if (!lead || lead.state !== "working") continue; // overridden/stopped meanwhile
       const calls = r.out?.calls ?? r.calls ?? []; // a thrown stage still bills the calls it made
       const cost = calls.reduce((s, c) => s + c.costUsd, 0);
-      for (const c of calls) costs[c.provider] = (costs[c.provider] ?? 0) + c.costUsd;
+      for (const c of calls) {
+        costs[c.provider] = (costs[c.provider] ?? 0) + c.costUsd;
+        bump(counts, `c:stage:${r.stage}:${c.provider}`, c.costUsd); // $ per stage per provider (Costs page)
+      }
       spent += cost;
 
       await ctx.db.insert("stepLogs", {
@@ -126,19 +129,20 @@ export const apply = internalMutation({
         }
         const attempts = lead.attempts + 1;
         await ctx.db.patch(lead._id, { attempts, lastError: r.error.slice(0, 500), state: attempts >= MAX_ATTEMPTS ? "error" : "queued" });
-        if (attempts >= MAX_ATTEMPTS) bump(counts, "error");
+        if (attempts >= MAX_ATTEMPTS) { bump(counts, "error"); bump(counts, "c:out:error", lead.costUsd + cost); }
         continue;
       }
       const out = r.out!;
       if (out.blob) await upsertBlob(ctx, lead._id, out.blob);
-      const patch: Partial<Doc<"leads">> = { ...out.patch, costUsd: lead.costUsd + cost, attempts: 0, lastError: undefined };
+      const total = lead.costUsd + cost;
+      const patch: Partial<Doc<"leads">> = { ...out.patch, costUsd: total, attempts: 0, lastError: undefined };
 
       // Global dedupe by domain: one company = one lead, across all runs.
       for (const b of out.bumps ?? []) bump(counts, b);
       if (out.patch.domain && out.patch.domain !== lead.domain && out.next !== "rejected") {
         const twin = await ctx.db.query("leads").withIndex("by_domain", (q) => q.eq("domain", out.patch.domain)).first();
         if (twin && twin._id !== lead._id) {
-          bump(counts, "dup");
+          bump(counts, "dup"); bump(counts, "c:out:dup", total);
           await ctx.db.patch(lead._id, { ...patch, state: "duplicate", duplicateOf: twin._id, rejectReason: "duplicate_domain" });
           continue;
         }
@@ -147,10 +151,14 @@ export const apply = internalMutation({
         // Waiting for an API key; partial progress (patch) is kept so Resume doesn't pay for it again.
         await ctx.db.patch(lead._id, { ...patch, state: "blocked", lastError: out.reject });
       } else if (out.next === "rejected") {
-        bump(counts, `rej:${(out.reject ?? "rejected").split(":")[0]}`);
+        const why = (out.reject ?? "rejected").split(":")[0];
+        bump(counts, `rej:${why}`); bump(counts, `c:out:rej:${why}`, total); // $ spent on leads that ended this way
         await ctx.db.patch(lead._id, { ...patch, state: "rejected", rejectReason: out.reject });
       } else if (out.next === "ready") {
         bump(counts, "ready");
+        const status = patch.emailStatus ?? lead.emailStatus ?? "none";
+        bump(counts, `c:out:email:${status}`, total);
+        if (status === "valid" || status === "catch_all") bump(counts, `src:${patch.emailSource ?? lead.emailSource ?? "unknown"}`);
         await ctx.db.patch(lead._id, { ...patch, state: "done", stage: "ready" });
       } else {
         if (STAGES.indexOf(out.next as Stage) > STAGES.indexOf(r.stage)) bump(counts, `in:${out.next}`);

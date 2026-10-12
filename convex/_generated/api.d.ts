@@ -10,10 +10,12 @@
 
 import type * as agent from "../agent.js";
 import type * as auth from "../auth.js";
+import type * as costs from "../costs.js";
 import type * as crons from "../crons.js";
 import type * as defaults from "../defaults.js";
 import type * as ingest from "../ingest.js";
 import type * as leads from "../leads.js";
+import type * as lib_costModel from "../lib/costModel.js";
 import type * as lib_csv from "../lib/csv.js";
 import type * as lib_rules from "../lib/rules.js";
 import type * as lib_stageList from "../lib/stageList.js";
@@ -40,10 +42,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   agent: typeof agent;
   auth: typeof auth;
+  costs: typeof costs;
   crons: typeof crons;
   defaults: typeof defaults;
   ingest: typeof ingest;
   leads: typeof leads;
+  "lib/costModel": typeof lib_costModel;
   "lib/csv": typeof lib_csv;
   "lib/rules": typeof lib_rules;
   "lib/stageList": typeof lib_stageList;
