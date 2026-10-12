@@ -61,6 +61,37 @@ export const control = mutation({
   },
 });
 
+/**
+ * Put this run's failed ("error", 3 attempts used) leads back in the queue at the stage that failed, and start the run.
+ * Up to 1000 per call (press again for more). Their cost moves out of the "error" bucket so the Costs page doesn't count it twice.
+ */
+export const retryFailed = mutation({
+  args: { token: v.string(), runId: v.id("runs") },
+  handler: async (ctx, { token, runId }): Promise<{ retried: number; left: number }> => {
+    await requireSession(ctx, token);
+    const run = await ctx.db.get(runId);
+    if (!run) throw new ConvexError("Run not found");
+    if (run.spentUsd >= run.budgetUsd) throw new ConvexError("Raise the budget first — this run already spent its budget.");
+    const failed = await ctx.db.query("leads").withIndex("by_run_state", (q) => q.eq("runId", runId).eq("state", "error")).take(1001);
+    const batch = failed.slice(0, 1000);
+    if (!batch.length) return { retried: 0, left: 0 };
+    let cost = 0;
+    for (const l of batch) {
+      await ctx.db.patch(l._id, { state: "queued", attempts: 0, lastError: undefined });
+      cost += l.costUsd;
+    }
+    const counts = { ...run.counts };
+    counts.error = Math.max(0, (counts.error ?? 0) - batch.length);
+    counts["c:out:error"] = Math.max(0, (counts["c:out:error"] ?? 0) - cost);
+    await ctx.db.patch(runId, { counts });
+    if (run.status !== "running" && run.status !== "ingesting") {
+      await ctx.db.patch(runId, { status: "running", pauseReason: undefined, tickAt: Date.now(), finishedAt: undefined });
+      await ctx.scheduler.runAfter(0, internal.worker.tick, { runId });
+    }
+    return { retried: batch.length, left: failed.length - batch.length };
+  },
+});
+
 export const generateUploadUrl = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {

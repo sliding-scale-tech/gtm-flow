@@ -21,6 +21,8 @@ export default function RunPage() {
   const runId = id as Id<"runs">;
   const run = useQuery(api.runs.get, { token, runId });
   const control = useMutation(api.runs.control);
+  const retryFailed = useMutation(api.runs.retryFailed);
+  const [retryNote, setRetryNote] = useState("");
   const [budget, setBudget] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,6 +36,15 @@ export default function RunPage() {
     try {
       const b = budget !== "" ? Number(budget) : undefined;
       await control({ token, runId, action, budgetUsd: action === "resume" ? b : undefined });
+    } catch (e) { setErr(errMsg(e)); }
+    setBusy(false);
+  };
+
+  const retry = async () => {
+    setBusy(true); setErr(""); setRetryNote("");
+    try {
+      const r = await retryFailed({ token, runId });
+      setRetryNote(r.retried ? `Retrying ${int(r.retried)} failed lead${r.retried === 1 ? "" : "s"}; the run is running again.${r.left ? ` ${int(r.left)} more failed: press ↻ again.` : ""}` : "No failed leads to retry.");
     } catch (e) { setErr(errMsg(e)); }
     setBusy(false);
   };
@@ -108,7 +119,13 @@ export default function RunPage() {
           <ul className="divide-y divide-zinc-800 text-sm">
             {drops.map(([k, n]) => <li key={k} className="flex justify-between py-1.5"><span className="text-zinc-300">{WHY[k] ?? k}</span><span className="tabular text-zinc-400">{int(n)}</span></li>)}
             {!!c.dup && <li className="flex justify-between py-1.5"><span className="text-zinc-300">Duplicates</span><span className="tabular text-zinc-400">{int(c.dup)}</span></li>}
-            {!!c.error && <li className="flex justify-between py-1.5"><span className="text-rose-300">Failed 3x (error)</span><span className="tabular text-zinc-400">{int(c.error)}</span></li>}
+            {!!c.error && <li className="flex justify-between py-1.5">
+              <span className="flex items-center gap-2 text-rose-300">Failed 3x (error)
+                <button type="button" onClick={retry} disabled={busy} title="Retry all failed leads (starts the run again)" aria-label="Retry failed leads"
+                  className="rounded border border-zinc-700 px-1.5 text-sm leading-5 text-zinc-300 hover:border-emerald-500 hover:text-emerald-300 disabled:opacity-50">↻</button>
+              </span>
+              <span className="tabular text-zinc-400">{int(c.error)}</span></li>}
+            {retryNote && <li className="py-1.5 text-xs text-zinc-400">{retryNote}</li>}
           </ul>
         )}
       </Card>
