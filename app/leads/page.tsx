@@ -21,17 +21,20 @@ type Row = {
   personal?: { reviewLine: string; description: string; genericLine: string; finalLine: string }; vars?: Record<string, string>; costUsd: number;
 };
 
-const BASE_COLS = ["name", "category", "county", "state", "phone", "maps_url", "domain", "segment", "owner_full_name", "owner_first_name", "owner_last_name",
-  "owner_title", "linkedin_url", "email", "email_status", "email_source", "review_line", "description", "generic_line", "final_line"];
+// Export = what you need to run a campaign, in a sensible order. Debug columns (status, reject reason) are added only
+// when exporting rows that are NOT all usable emails.
+const OUTREACH_COLS = ["company", "first_name", "last_name", "job_title", "email", "email_status", "phone", "website", "linkedin_url", "county", "state",
+  "final_line", "review_line", "description", "generic_line"];
+const isUsable = (l: Row) => !!l.email && (l.emailStatus === "valid" || l.emailStatus === "catch_all");
 
 function flatten(l: Row): Record<string, unknown> {
   return {
-    name: l.name, category: l.category, county: l.county, state: l.usState, phone: l.phone, maps_url: l.mapsUrl, domain: l.domain, segment: l.classify?.segment,
-    owner_full_name: l.owner?.fullName, owner_first_name: l.owner?.firstName, owner_last_name: l.owner?.lastName, owner_title: l.owner?.title,
-    linkedin_url: l.owner?.linkedinUrl, email: l.email, email_status: l.emailStatus, email_source: l.emailSource,
-    review_line: l.personal?.reviewLine, description: l.personal?.description, generic_line: l.personal?.genericLine, final_line: l.personal?.finalLine,
+    company: l.name, first_name: l.owner?.firstName, last_name: l.owner?.lastName, job_title: l.owner?.title,
+    email: l.email, email_status: l.emailStatus, phone: l.phone, website: l.domain, linkedin_url: l.owner?.linkedinUrl,
+    county: l.county, state: l.usState,
+    final_line: l.personal?.finalLine, review_line: l.personal?.reviewLine, description: l.personal?.description, generic_line: l.personal?.genericLine,
     ...Object.fromEntries(Object.entries(l.vars ?? {}).map(([k, v]) => [`vars.${k}`, v])),
-    lead_state: l.state, reject_reason: l.rejectReason, cost_usd: l.costUsd,
+    lead_status: l.state, reject_reason: l.rejectReason,
   };
 }
 
@@ -48,6 +51,7 @@ function LeadsInner() {
   const [open, setOpen] = useState<Id<"leads"> | null>(null);
   const [push, setPush] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [usableOnly, setUsableOnly] = useState(true);
   const [err, setErr] = useState("");
 
   const runs = useQuery(api.runs.list, { token });
@@ -62,16 +66,18 @@ function LeadsInner() {
       const rows: Record<string, unknown>[] = [];
       let cursor: string | null = null;
       for (;;) {
-        const r: { page: Row[]; isDone: boolean; continueCursor: string } = await convex.query(api.leads.page, { token, ...filters, paginationOpts: { numItems: 500, cursor } }) as never;
-        rows.push(...r.page.map(flatten));
+        // Usable emails only exist on finished ("done") leads, so ask the server for just those.
+        const r: { page: Row[]; isDone: boolean; continueCursor: string } = await convex.query(api.leads.page, { token, ...filters, ...(usableOnly && { state: "done" }), paginationOpts: { numItems: 500, cursor } }) as never;
+        rows.push(...r.page.filter((l) => !usableOnly || isUsable(l)).map(flatten));
         if (r.isDone) break;
         cursor = r.continueCursor;
       }
-      const cols = [...BASE_COLS, ...[...new Set(rows.flatMap((r) => Object.keys(r).filter((k) => k.startsWith("vars."))))], "lead_state", "reject_reason", "cost_usd"];
+      if (!rows.length) { setErr(usableOnly ? "No usable emails (valid / catch-all) in this selection yet." : "Nothing to export for this selection."); return; }
+      const cols = [...OUTREACH_COLS, ...[...new Set(rows.flatMap((r) => Object.keys(r).filter((k) => k.startsWith("vars."))))], ...(usableOnly ? [] : ["lead_status", "reject_reason"])];
       const blob = new Blob(["﻿" + toCsv(rows, cols)], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.href = url; a.download = `${usableOnly ? "usable-emails" : "leads"}-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e) { setErr(errMsg(e)); }
@@ -86,6 +92,9 @@ function LeadsInner() {
     <div>
       <PageHeader title="Leads" sub={`${int(rows.length)} loaded${status === "CanLoadMore" ? "+" : ""}`}
         actions={<>
+          <label className="mr-1 flex cursor-pointer items-center gap-1.5 text-xs text-zinc-300" title="Only leads with a valid or catch-all email">
+            <input type="checkbox" className="accent-emerald-500" checked={usableOnly} onChange={(e) => setUsableOnly(e.target.checked)} />Usable emails only
+          </label>
           <Button size="sm" loading={exporting} onClick={exportCsv}>Export CSV</Button>
           <Button size="sm" variant="primary" onClick={() => setPush(true)}>Push to Instantly</Button>
         </>} />
