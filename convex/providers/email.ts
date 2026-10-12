@@ -25,17 +25,28 @@ export async function findymailFind(name: string, domain: string, s: Settings): 
   return { email, costUsd: email ? s.prices.findymailFound : 0 };
 }
 
-/** Findymail's verifier: only "verified" true/false (no catch-all/risky detail). 1 verifier credit per call, charged either way. */
-export async function findymailVerify(email: string, s: Settings): Promise<{ status: EmailStatus; costUsd: number }> {
-  if (isMock()) return { status: hash(email + "fv") < 650 ? "valid" : "invalid", costUsd: s.prices.findymailVerify };
-  const r = await http("https://app.findymail.com/api/verify", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env("FINDYMAIL_API_KEY")}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+// ---------- Bouncer ---------- (kb/bouncer.md)
+/** deliverable/risky + acceptAll -> catch_all, so accept-all domains stay tagged; undeliverable -> invalid. */
+export function mapBouncer(b: any): EmailStatus {
+  const accept = String(b?.domain?.acceptAll ?? "").toLowerCase() === "yes";
+  switch (String(b?.status ?? "").toLowerCase()) {
+    case "undeliverable": return "invalid";
+    case "deliverable": return accept ? "catch_all" : "valid";
+    case "risky": return accept ? "catch_all" : "risky";
+    default: return "unknown";
+  }
+}
+
+export async function bouncerVerify(email: string, s: Settings): Promise<{ status: EmailStatus; raw: string; costUsd: number }> {
+  if (isMock()) {
+    const h = hash(email + "bv");
+    return { status: h < 600 ? "valid" : h < 800 ? "catch_all" : "invalid", raw: "mock", costUsd: s.prices.bouncerVerify };
+  }
+  const r = await http(`https://api.usebouncer.com/v1.1/email/verify?email=${encodeURIComponent(email)}&timeout=20`, {
+    headers: { "x-api-key": env("BOUNCER_API_KEY") }, timeoutMs: 45_000,
   });
-  if (r.status !== 200) fail("findymail", r);
-  const v = r.body?.verified;
-  return { status: v === true ? "valid" : v === false ? "invalid" : "unknown", costUsd: s.prices.findymailVerify };
+  if (r.status !== 200) fail("bouncer", r);
+  return { status: mapBouncer(r.body), raw: `${r.body?.status}/${r.body?.reason}/acceptAll:${r.body?.domain?.acceptAll}`, costUsd: s.prices.bouncerVerify };
 }
 
 // ---------- TryKitt ----------

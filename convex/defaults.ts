@@ -43,7 +43,7 @@ export const DEFAULT_SETTINGS = {
   prices: {
     fastIn: 0.25, fastOut: 1.5, smartIn: 0.75, smartOut: 3.75,
     exaSearch: 0.007, exaPage: 0.001,
-    findymailFound: 0.05, findymailVerify: 0.01, // findymailVerify = estimate (1 verifier credit)
+    findymailFound: 0.05, bouncerVerify: 0.008, // bouncerVerify = estimate (1 credit); edit in Settings
     trykittFound: 0.005, trykittVerify: 0.0015, instantlyVerify: 0.005,
   },
   campaignVariables: [] as CampaignVariable[],

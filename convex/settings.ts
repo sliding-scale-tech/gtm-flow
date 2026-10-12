@@ -28,7 +28,7 @@ export const get = query({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
     await requireSession(ctx, token);
-    const keys = { gemini: "GEMINI_API_KEY", exa: "EXA_API_KEY", findymail: "FINDYMAIL_API_KEY", trykitt: "TRYKITT_API_KEY",
+    const keys = { gemini: "GEMINI_API_KEY", exa: "EXA_API_KEY", findymail: "FINDYMAIL_API_KEY", trykitt: "TRYKITT_API_KEY", bouncer: "BOUNCER_API_KEY",
       instantly: "INSTANTLY_API_KEY", googleServiceAccount: "GOOGLE_SERVICE_ACCOUNT_JSON", driveFolder: "DRIVE_FOLDER_ID" };
     // Only presence is exposed, never values.
     const keyStatus = Object.fromEntries(Object.entries(keys).map(([k, env]) => [k, !!process.env[env]]));

@@ -6,9 +6,9 @@ import { normalizeCompany, parseReviews } from "@/convex/lib/text";
 import { Badge, cx, type Tone } from "@/components/ui";
 
 type Log = { stage: string; summary: string; error?: string; _creationTime: number };
-type Src = "CSV" | "Exa" | "Gemini" | "Agent" | "Findymail" | "TryKitt" | "Instantly" | "Formula" | "Dropped";
+type Src = "CSV" | "Exa" | "Gemini" | "Agent" | "Findymail" | "TryKitt" | "Instantly" | "Bouncer" | "Formula" | "Dropped";
 const srcTone: Record<Src, Tone> = {
-  CSV: "zinc", Exa: "blue", Gemini: "violet", Agent: "green", Findymail: "amber", TryKitt: "amber", Instantly: "amber", Formula: "blue", Dropped: "red",
+  CSV: "zinc", Exa: "blue", Gemini: "violet", Agent: "green", Findymail: "amber", TryKitt: "amber", Instantly: "amber", Bouncer: "amber", Formula: "blue", Dropped: "red",
 };
 type Col = { n: number | string; name: string; src: Src; value: ReactNode; copy?: string; note?: string };
 
@@ -52,8 +52,8 @@ export function EnrichmentGrid({ lead: l, logs, named = [], onCopy }: { lead: Do
     // E/F. Email discovery + verification
     { n: 17, name: "Trykitt Find Email", src: "TryKitt", value: kitt ? (kitt.email ? "found" : "not found") : "", note: "Step 1 of the email waterfall." },
     { n: 18, name: "Trykitt Email", src: "TryKitt", value: kitt?.email ?? "", copy: kitt?.email || undefined },
-    { n: 19, name: "Bouncer Trykitt", src: "Findymail", value: kitt?.verifier ? `${kitt.verifier} verify` : "", note: "Doc: Bouncer. Here: Findymail verifies the TryKitt email (older leads: Instantly)." },
-    { n: 20, name: "Status", src: "Findymail", value: kitt?.verifier ? kitt.status : "" },
+    { n: 19, name: "Bouncer Trykitt", src: "Bouncer", value: kitt?.verifier ? `${kitt.verifier} verify` : "", note: "Doc: Bouncer. Here: Bouncer verifies the TryKitt email (older leads: Findymail / Instantly)." },
+    { n: 20, name: "Status", src: "Bouncer", value: kitt?.verifier ? kitt.status : "" },
     { n: 21, name: "Findymail Email", src: "Findymail", value: fymail ? (fymail.email ? (fymail.status === "same_as_trykitt" ? "same as TryKitt" : "found") : "not found") : kitt?.status === "valid" ? "not needed (TryKitt email valid)" : "", note: "Step 2: only if TryKitt had no valid email." },
     { n: 22, name: "Email", src: "Findymail", value: fymail?.email ?? "", copy: fymail?.email || undefined },
     { n: 23, name: "Bouncer findymail", src: "TryKitt", value: fymail?.verifier ? "TryKitt verify" : "", note: "Doc: Bouncer. Here: TryKitt verifies the Findymail email." },
@@ -64,7 +64,7 @@ export function EnrichmentGrid({ lead: l, logs, named = [], onCopy }: { lead: Do
     { n: 28, name: "Status 2", src: "Dropped", value: "Not used" },
     // G. Final email
     { n: 29, name: "Final verified Email new", src: "Formula", value: usable ? `${l.email} (${l.emailStatus})` : l.emailStatus === "invalid" ? "— (invalid)" : "", copy: usable ? l.email : undefined,
-      note: "TryKitt→Findymail verify, then Findymail find→TryKitt verify. Only 'valid' stops the waterfall; if none is valid, the best catch-all is kept, tagged." },
+      note: "TryKitt→Bouncer verify, then Findymail find→TryKitt verify. Only 'valid' stops the waterfall; if none is valid, the best catch-all is kept, tagged." },
     // H/I. Reviews
     { n: 30, name: "Google Map Review Scraper", src: "CSV",
       value: `${parseReviews(l.reviews).length} reviews in CSV allReviews · ${named.length} named 5★ from reviews.csv`, note: "Doc: Apify. Here: CSV allReviews + reviews.csv (reviewer names)." },

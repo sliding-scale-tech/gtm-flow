@@ -13,7 +13,7 @@ type S = {
 };
 
 const KEYS: [string, string][] = [
-  ["gemini", "GEMINI_API_KEY"], ["exa", "EXA_API_KEY"], ["findymail", "FINDYMAIL_API_KEY"], ["trykitt", "TRYKITT_API_KEY"],
+  ["gemini", "GEMINI_API_KEY"], ["exa", "EXA_API_KEY"], ["findymail", "FINDYMAIL_API_KEY"], ["trykitt", "TRYKITT_API_KEY"], ["bouncer", "BOUNCER_API_KEY"],
   ["instantly", "INSTANTLY_API_KEY"], ["googleServiceAccount", "GOOGLE_SERVICE_ACCOUNT_JSON"], ["driveFolder", "DRIVE_FOLDER_ID"],
 ];
 const SEGS = ["residential", "hoa", "commercial", "vacation"];
@@ -71,7 +71,7 @@ function Form({ init, keyStatus, mock, token }: { init: S; keyStatus: Record<str
         </div>
         <p className="mt-3 text-xs text-zinc-500">
           Keys are never shown here. Add them in the Convex dashboard under Settings, then Environment Variables. Names: GEMINI_API_KEY, EXA_API_KEY,
-          FINDYMAIL_API_KEY, TRYKITT_API_KEY, INSTANTLY_API_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, DRIVE_FOLDER_ID, APP_PASSWORD, and PIPELINE_MOCK=1 for fake data.
+          FINDYMAIL_API_KEY, TRYKITT_API_KEY, BOUNCER_API_KEY, INSTANTLY_API_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, DRIVE_FOLDER_ID, APP_PASSWORD, and PIPELINE_MOCK=1 for fake data.
         </p>
       </Card>
 

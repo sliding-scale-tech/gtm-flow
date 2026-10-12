@@ -95,3 +95,8 @@ Newest at the bottom. Each entry: date · decision · why.
 - Waterfall is back to: 1) TryKitt find → Findymail verify; 2) Findymail find → TryKitt verify; 3) best catch-all/risky kept; 4) reject. 25 tests pass.
 - Old leads keep `aiark` rows in their email trail (display only). `calls[].credits` stays optional in the schema because old step logs contain it. Stale saved `prices.aiarkCredit` / `aiarkPerMinute` values are ignored on load.
 - Still to do by the user: delete `AIARK_API_KEY` from Convex env variables if no longer wanted.
+
+## 2026-10-12 — Bouncer replaces Findymail's verifier (user, option A)
+- Step 1 is now TryKitt find -> **Bouncer** verify (`bouncerVerify`, kb/bouncer.md). Findymail's own verify call was removed (never used live). Step 2 unchanged: Findymail find -> TryKitt verify.
+- Mapping: undeliverable -> invalid; deliverable -> valid (catch_all if `domain.acceptAll = yes`); risky -> risky (catch_all if acceptAll yes); unknown -> unknown (waterfall treats as risky). This restores the catch-all tag that Findymail's true/false verify could not give.
+- `prices.bouncerVerify` = 0.008 estimate. Key: `BOUNCER_API_KEY` (Convex env). No free key test exists; first live call = 1 credit, only with user approval. 26 tests pass.

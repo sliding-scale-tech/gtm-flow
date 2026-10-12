@@ -1,13 +1,14 @@
-// Email waterfall scenarios with faked providers: TryKitt→Findymail,, then Findymail→TryKitt verify, single pass.
+// Email waterfall scenarios with faked providers: TryKitt→Bouncer, then Findymail→TryKitt verify, single pass.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const p = vi.hoisted(() => ({
-  trykittFind: vi.fn(), findymailVerify: vi.fn(), findymailFind: vi.fn(), trykittVerify: vi.fn(),
+  trykittFind: vi.fn(), bouncerVerify: vi.fn(), findymailFind: vi.fn(), trykittVerify: vi.fn(),
 }));
 vi.mock("../providers/email", async (orig) => ({ ...(await orig<object>()), ...p })); // real helpers, fake API calls
 vi.mock("../agent", () => ({ research: vi.fn() }));
 
 import { RUNNERS } from "../stages";
+import { mapBouncer } from "../providers/email";
 import { DEFAULT_SETTINGS } from "../defaults";
 
 const lead = { owner: { fullName: "Jane Smith", linkedinUrl: "" }, domain: "acme.com" } as any;
@@ -20,9 +21,9 @@ const reset = () => Object.values(p).forEach((f) => f.mockReset());
 describe("email waterfall", () => {
   beforeEach(reset);
 
-  it("TryKitt email valid on Findymail → done, Findymail never called", async () => {
+  it("TryKitt email valid on Bouncer → done, Findymail never called", async () => {
     p.trykittFind.mockResolvedValue(found("Jane@acme.com"));
-    p.findymailVerify.mockResolvedValue(verified("valid"));
+    p.bouncerVerify.mockResolvedValue(verified("valid"));
     const o = await run();
     expect(o.next).toBe("personalize");
     expect(o.patch).toMatchObject({ email: "jane@acme.com", emailSource: "trykitt", emailStatus: "valid" });
@@ -31,7 +32,7 @@ describe("email waterfall", () => {
 
   it("TryKitt email invalid → Findymail → TryKitt verify valid → done", async () => {
     p.trykittFind.mockResolvedValue(found("jane@acme.com"));
-    p.findymailVerify.mockResolvedValue(verified("invalid"));
+    p.bouncerVerify.mockResolvedValue(verified("invalid"));
     p.findymailFind.mockResolvedValue(found("j.smith@acme.com"));
     p.trykittVerify.mockResolvedValue(verified("valid"));
     const o = await run();
@@ -45,12 +46,12 @@ describe("email waterfall", () => {
     p.trykittVerify.mockResolvedValue(verified("valid"));
     const o = await run();
     expect(o.patch).toMatchObject({ emailSource: "findymail", emailStatus: "valid" });
-    expect(p.findymailVerify).not.toHaveBeenCalled();
+    expect(p.bouncerVerify).not.toHaveBeenCalled();
   });
 
   it("only catch-all available → keeps the best one, tagged", async () => {
     p.trykittFind.mockResolvedValue(found("jane@acme.com"));
-    p.findymailVerify.mockResolvedValue(verified("catch_all"));
+    p.bouncerVerify.mockResolvedValue(verified("catch_all"));
     p.findymailFind.mockResolvedValue(found("j@acme.com"));
     p.trykittVerify.mockResolvedValue(verified("invalid"));
     const o = await run();
@@ -60,7 +61,7 @@ describe("email waterfall", () => {
 
   it("catch-all beats risky when choosing the fallback", async () => {
     p.trykittFind.mockResolvedValue(found("jane@acme.com"));
-    p.findymailVerify.mockResolvedValue(verified("unknown")); // → risky
+    p.bouncerVerify.mockResolvedValue(verified("unknown")); // → risky
     p.findymailFind.mockResolvedValue(found("j@acme.com"));
     p.trykittVerify.mockResolvedValue(verified("catch_all"));
     const o = await run();
@@ -76,7 +77,7 @@ describe("email waterfall", () => {
 
   it("Findymail returns the same invalid address → not re-verified, rejected invalid_email", async () => {
     p.trykittFind.mockResolvedValue(found("jane@acme.com"));
-    p.findymailVerify.mockResolvedValue(verified("invalid"));
+    p.bouncerVerify.mockResolvedValue(verified("invalid"));
     p.findymailFind.mockResolvedValue(found("JANE@acme.com"));
     const o = await run();
     expect(o).toMatchObject({ next: "rejected", reject: "invalid_email" });
@@ -85,20 +86,20 @@ describe("email waterfall", () => {
 
   it("each finder runs at most once (max 3 finds + 3 verifies), never goes back a stage", async () => {
     p.trykittFind.mockResolvedValue(found("a@acme.com"));
-    p.findymailVerify.mockResolvedValue(verified("invalid"));
+    p.bouncerVerify.mockResolvedValue(verified("invalid"));
     p.findymailFind.mockResolvedValue(found("b@acme.com"));
     p.trykittVerify.mockResolvedValue(verified("invalid"));
     const o = await run();
     expect(p.trykittFind).toHaveBeenCalledTimes(1);
     expect(p.findymailFind).toHaveBeenCalledTimes(1);
-    expect(p.findymailVerify).toHaveBeenCalledTimes(1);
+    expect(p.bouncerVerify).toHaveBeenCalledTimes(1);
     expect(p.trykittVerify).toHaveBeenCalledTimes(1);
     expect(["personalize", "rejected"]).toContain(o.next);
   });
 
-  it("Findymail server error → not 'valid', moves on to Findymail (no crash, no retry)", async () => {
+  it("Bouncer server error → not 'valid', moves on to Findymail (no crash, no retry)", async () => {
     p.trykittFind.mockResolvedValue(found("jane@acme.com"));
-    p.findymailVerify.mockRejectedValue(new Error("findymail HTTP 500: Something went wrong"));
+    p.bouncerVerify.mockRejectedValue(new Error("findymail HTTP 500: Something went wrong"));
     p.findymailFind.mockResolvedValue(found("j.smith@acme.com"));
     p.trykittVerify.mockResolvedValue(verified("valid"));
     const o = await run();
@@ -106,9 +107,9 @@ describe("email waterfall", () => {
     expect(o.calls.length).toBe(3); // trykitt find + findymail find + trykitt verify (findymail threw, nothing billed)
   });
 
-  it("Findymail error and no Findymail email → keeps TryKitt email as 'risky'", async () => {
+  it("Bouncer error and no Findymail email → keeps TryKitt email as 'risky'", async () => {
     p.trykittFind.mockResolvedValue(found("jane@acme.com"));
-    p.findymailVerify.mockRejectedValue(new Error("findymail HTTP 500"));
+    p.bouncerVerify.mockRejectedValue(new Error("findymail HTTP 500"));
     p.findymailFind.mockResolvedValue(found(null));
     const o = await run();
     expect(o.patch).toMatchObject({ email: "jane@acme.com", emailStatus: "risky" });
@@ -116,12 +117,12 @@ describe("email waterfall", () => {
 
   it("Findymail key missing → blocked, TryKitt step saved; resume doesn't pay TryKitt again", async () => {
     p.trykittFind.mockResolvedValue(found("jane@acme.com"));
-    p.findymailVerify.mockResolvedValue(verified("invalid"));
+    p.bouncerVerify.mockResolvedValue(verified("invalid"));
     p.findymailFind.mockRejectedValue(missing("FINDYMAIL_API_KEY"));
     const o = await run();
     expect(o.next).toBe("blocked");
     expect(o.patch.emailTrail).toEqual([
-      { finder: "trykitt", email: "jane@acme.com", verifier: "findymail", status: "invalid" },
+      { finder: "trykitt", email: "jane@acme.com", verifier: "bouncer", status: "invalid" },
     ]);
     // resume with the saved trail
     reset();
@@ -129,35 +130,45 @@ describe("email waterfall", () => {
     p.trykittVerify.mockResolvedValue(verified("valid"));
     const o2 = await run({ ...lead, emailTrail: o.patch.emailTrail });
     expect(p.trykittFind).not.toHaveBeenCalled();
-    expect(p.findymailVerify).not.toHaveBeenCalled();
+    expect(p.bouncerVerify).not.toHaveBeenCalled();
     expect(o2.patch).toMatchObject({ email: "j.smith@acme.com", emailStatus: "valid" });
   });
 
-  it("Findymail key missing after TryKitt found → blocked; resume only verifies", async () => {
+  it("Bouncer key missing after TryKitt found → blocked; resume only verifies", async () => {
     p.trykittFind.mockResolvedValue(found("jane@acme.com"));
-    p.findymailVerify.mockRejectedValue(missing("FINDYMAIL_API_KEY"));
+    p.bouncerVerify.mockRejectedValue(missing("BOUNCER_API_KEY"));
     const o = await run();
     expect(o.next).toBe("blocked");
     reset();
-    p.findymailVerify.mockResolvedValue(verified("valid"));
+    p.bouncerVerify.mockResolvedValue(verified("valid"));
     const o2 = await run({ ...lead, emailTrail: o.patch.emailTrail });
     expect(p.trykittFind).not.toHaveBeenCalled();
     expect(o2.patch).toMatchObject({ email: "jane@acme.com", emailSource: "trykitt", emailStatus: "valid" });
   });
 
-  it('TryKitt placeholder "no-results-found" counts as not found (never sent to Findymail)', async () => {
+  it('TryKitt placeholder "no-results-found" counts as not found (never sent to Bouncer)', async () => {
     p.trykittFind.mockResolvedValue(found(null));
     p.findymailFind.mockRejectedValue(missing("FINDYMAIL_API_KEY"));
     const o = await run();
-    expect(p.findymailVerify).not.toHaveBeenCalled();
+    expect(p.bouncerVerify).not.toHaveBeenCalled();
     expect(o.next).toBe("blocked");
     // an old trail holding the placeholder is treated as "not found" on resume
     reset();
     p.findymailFind.mockResolvedValue(found("jane@acme.com"));
     p.trykittVerify.mockResolvedValue(verified("valid"));
-    const o2 = await run({ ...lead, emailTrail: [{ finder: "trykitt", email: "no-results-found", verifier: "findymail", status: "risky" }] });
+    const o2 = await run({ ...lead, emailTrail: [{ finder: "trykitt", email: "no-results-found", verifier: "bouncer", status: "risky" }] });
     expect(p.trykittFind).not.toHaveBeenCalled();
-    expect(p.findymailVerify).not.toHaveBeenCalled();
+    expect(p.bouncerVerify).not.toHaveBeenCalled();
     expect(o2.patch).toMatchObject({ email: "jane@acme.com", emailSource: "findymail", emailStatus: "valid" });
+  });
+
+  it("maps Bouncer: undeliverable=invalid; deliverable/risky on an accept-all domain=catch_all", () => {
+    expect(mapBouncer({ status: "deliverable", domain: { acceptAll: "no" } })).toBe("valid");
+    expect(mapBouncer({ status: "deliverable", domain: { acceptAll: "yes" } })).toBe("catch_all");
+    expect(mapBouncer({ status: "risky", domain: { acceptAll: "yes" } })).toBe("catch_all");
+    expect(mapBouncer({ status: "risky", domain: { acceptAll: "no" } })).toBe("risky");
+    expect(mapBouncer({ status: "undeliverable" })).toBe("invalid");
+    expect(mapBouncer({ status: "unknown" })).toBe("unknown");
+    expect(mapBouncer({})).toBe("unknown");
   });
 });

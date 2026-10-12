@@ -4,7 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import type { PromptKey, Settings } from "./defaults";
 import { isBadHost, parseReviews, rootDomain } from "./lib/text";
 import { research } from "./agent";
-import { asEmail, findymailFind, findymailVerify, trykittFind, trykittVerify, type EmailStatus } from "./providers/email";
+import { asEmail, bouncerVerify, findymailFind, trykittFind, trykittVerify, type EmailStatus } from "./providers/email";
 import { exaSearch, exaSite, type ExaHit } from "./providers/exa";
 import { clean, fill, gemini, type Tier } from "./providers/gemini";
 
@@ -67,7 +67,7 @@ async function building(c: StageCtx): Promise<StageOut> {
 
 /**
  * Email waterfall — ONE single pass, no going back (so it can never loop):
- *   1. TryKitt find  → Findymail verify → "valid" = save, done
+ *   1. TryKitt find  → Bouncer verify → "valid" = save, done
  *   2. Findymail find → TryKitt verify  → "valid" = save, done
  *   3. No valid email but a catch-all/unclear one → save the best one, tagged
  *   4. Nothing usable → reject
@@ -98,7 +98,7 @@ async function findEmail(c: StageCtx): Promise<StageOut> {
   const blocked = (e: Error): StageOut => ({ patch: { emailTrail: trail }, next: "blocked", reject: e.message, calls, summary: `${summary()} | waiting: ${e.message}` });
   const verifyStatus = (raw: EmailStatus) => (raw === "unknown" ? "risky" : raw);
 
-  // 1. TryKitt → Findymail verify (reuse a finished step 1 from before a "blocked" pause — no paying twice)
+  // 1. TryKitt → Bouncer verify (reuse a finished step 1 from before a "blocked" pause — no paying twice)
   const prevRaw = (l.emailTrail ?? []).find((t) => t.finder === "trykitt");
   // Old trails may hold a placeholder like "no-results-found" — treat that as "not found".
   const prev = prevRaw && prevRaw.email && !asEmail(prevRaw.email) ? { finder: "trykitt", email: "", verifier: "", status: "not_found" } : prevRaw;
@@ -118,13 +118,13 @@ async function findEmail(c: StageCtx): Promise<StageOut> {
     }
     if (kEmail) {
       let st: string;
-      try { st = verifyStatus(track("findymail", await findymailVerify(kEmail, c.settings)).status); }
+      try { st = verifyStatus(track("bouncer", await bouncerVerify(kEmail, c.settings)).status); }
       catch (e) {
         if (isMissingKey(e)) { trail.push({ finder: "trykitt", email: kEmail, verifier: "", status: "found, not verified yet" }); return blocked(e as Error); }
         st = "risky"; // verifier down → can't confirm → not "valid", try step 2
-        trail.push({ finder: "trykitt", email: kEmail, verifier: "findymail", status: `risky (${errText(e)})` });
+        trail.push({ finder: "trykitt", email: kEmail, verifier: "bouncer", status: `risky (${errText(e)})` });
       }
-      if (!trail.some((t) => t.finder === "trykitt")) trail.push({ finder: "trykitt", email: kEmail, verifier: "findymail", status: st });
+      if (!trail.some((t) => t.finder === "trykitt")) trail.push({ finder: "trykitt", email: kEmail, verifier: "bouncer", status: st });
       consider(kEmail, "trykitt", st);
       if (st === "valid") return done(kEmail, "trykitt", "valid");
     } else if (!trail.some((t) => t.finder === "trykitt")) trail.push({ finder: "trykitt", email: "", verifier: "", status: "not_found" });

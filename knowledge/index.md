@@ -9,6 +9,7 @@ Standing rule: **no library or API gets used without a research pass logged in `
 | Findymail | kb/findymail.md | 2026-10-07 | not-found shape unconfirmed |
 | TryKitt | kb/trykitt.md | 2026-10-07, live 2026-10-08 | `x-api-key`; flat body; status in `validity`; cost in `credits.jobCredits` |
 | AI Ark | kb/ai-ark.md | 2026-10-08 | **REMOVED 2026-10-09** (found 0 emails in WY/NH tests; free key 5 req/min). Kept for reference only |
+| Bouncer | kb/bouncer.md | 2026-10-12 | `x-api-key`; GET /v1.1/email/verify; status + domain.acceptAll; no free balance check; price per credit UNCONFIRMED |
 | Instantly v2 | kb/instantly.md | 2026-10-07 | verify = verified/invalid + catch_all flag; /leads/add bulk 1000 |
 | Convex | kb/convex.md | 2026-10-07 | |
 | Google Drive (service account) | kb/google-drive-api.md | 2026-10-07 | |
