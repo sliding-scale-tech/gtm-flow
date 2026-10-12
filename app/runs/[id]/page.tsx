@@ -44,6 +44,17 @@ export default function RunPage() {
   const spentPct = run.budgetUsd ? Math.min(100, (run.spentUsd / run.budgetUsd) * 100) : 0;
   const canResume = ["paused", "stopped", "done"].includes(run.status);
 
+  // Overall progress, from counters the pipeline already keeps (no extra query): finished = ready + rejected + duplicate + error.
+  const total = c.rows ?? 0;
+  const rejected = drops.reduce((n, [, k]) => n + k, 0);
+  const finished = (c.ready ?? 0) + rejected + (c.dup ?? 0) + (c.error ?? 0);
+  const left = Math.max(0, total - finished);
+  const donePct = total ? Math.min(100, (finished / total) * 100) : 0;
+  // ETA only counts leads that needed real work (rows dropped by free cleaning at import are instant and would skew it).
+  const instant = ["category", "chain", "closed", "no_name"].reduce((n, k) => n + (c[`rej:${k}`] ?? 0), 0);
+  const worked = finished - instant;
+  const etaMin = run.status === "running" && worked >= 5 && left > 0 ? Math.max(1, Math.round((Date.now() - run.startedAt) / 60000 / worked * left)) : null;
+
   return (
     <div className="space-y-4">
       <PageHeader title={run.fileName} sub={<span className="inline-flex items-center gap-2"><Badge tone={stateTone[run.status]}>{run.status}</Badge>{run.source}</span>}
@@ -63,6 +74,17 @@ export default function RunPage() {
           {["running", "paused", "ingesting"].includes(run.status) && <Button variant="danger" onClick={() => act("stop")} disabled={busy}>Stop</Button>}
         </div>
         <div className="mt-2"><ErrorText>{err}</ErrorText></div>
+        <div className="mt-4">
+          <div className="flex justify-between text-xs text-zinc-400">
+            <span>{run.status === "ingesting" ? "Importing file…" : <>Progress <span className="tabular text-zinc-200">{int(finished)}</span> of {int(total)} done · <span className="tabular text-zinc-200">{int(left)}</span> left{etaMin ? ` · ~${etaMin} min` : ""}</>}</span>
+            <span>{Math.round(donePct)}%</span>
+          </div>
+          <div className="mt-1 h-2 rounded bg-zinc-800"><div className="h-full rounded bg-sky-500 transition-all" style={{ width: `${donePct}%` }} /></div>
+          <div className="mt-1 flex flex-wrap gap-x-4 text-xs text-zinc-500">
+            <span>ready {int(c.ready)}</span><span>rejected {int(rejected)}</span><span>duplicate {int(c.dup)}</span><span>error {int(c.error)}</span>
+            {left > 0 && run.status === "paused" && <span className="text-amber-300">{int(left)} waiting (see the pause reason above)</span>}
+          </div>
+        </div>
         <div className="mt-4">
           <div className="flex justify-between text-xs text-zinc-400"><span>Spent {usd(run.spentUsd)} of {usd(run.budgetUsd)}</span><span>{Math.round(spentPct)}%</span></div>
           <div className="mt-1 h-2 rounded bg-zinc-800"><div className={spentPct >= 90 ? "h-full rounded bg-amber-400" : "h-full rounded bg-emerald-500"} style={{ width: `${spentPct}%` }} /></div>
