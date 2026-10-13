@@ -54,19 +54,31 @@ Text = `candidates[0].content.parts[*].text` (skip parts with `thought:true`). f
 ### Interactions API (brief)
 `POST https://generativelanguage.googleapis.com/v1beta/interactions`, header `x-goog-api-key`. Body: `model`, `input`, `system_instruction`, `tools:[{"type":"google_search"}]`, `response_format`, `generation_config{thinking_level,max_output_tokens,seed,stop_sequences}`, `service_tier` (flex|standard|priority|deferred), `store`. Response: `id`, `status`, `steps[]` (typed: model_output, google_search_result, ...), `usage{total_input_tokens,total_output_tokens,total_thought_tokens,total_cached_tokens}`. Field map: contents->input, generationConfig->generation_config, thinkingConfig->thinking_level, candidates->steps, usageMetadata->usage.
 
-## Pricing (standard tier, per 1M tokens, pricing page read 2026-10-07)
-| Model ID | Input | Output |
-|---|---|---|
-| gemini-3.1-flash-lite | $0.25 (audio $0.50) | $1.50 |
-| gemini-3.5-flash-lite | $0.30 | $2.50 |
-| gemini-3.8 / 3.7 / 3.6-flash | $0.75 | $3.75 (stated "through Dec 31, 2026") |
-| gemini-3.5-flash | $1.50 | $9.00 |
-| gemini-3.1-pro-preview | $2.00 (<=200k) | $12.00 |
-| gemini-2.5-pro | $1.25 (<=200k) | $10.00 |
+## Pricing (standard tier, re-checked 2026-10-13)
+
+### Standard tier (per 1M tokens)
+| Model ID | Input | Output | Cached Input |
+|---|---|---|---|
+| gemini-3.1-flash-lite | $0.25 (audio $0.50) | $1.50 | $0.025 |
+| gemini-3.5-flash-lite | $0.30 | $2.50 | — |
+| gemini-3.8 / 3.7 / 3.6-flash | $0.75 (through Dec 31) | $3.75 (through Dec 31) | $0.075 (through Dec 31) |
+| gemini-3.5-flash | $1.50 | $9.00 | — |
+| gemini-3.1-pro-preview | $2.00 (<=200k) | $12.00 | — |
+| gemini-2.5-pro | $1.25 (<=200k) | $10.00 | — |
+
+**Price change deadline:** ALL 3.8 Flash prices (input, output, cached) **double on Jan 1, 2027**: $1.50 in / $7.50 out / $0.15 cached.
+
 Output price includes thinking tokens. Models page: only pro-tier 3.x is `gemini-3.1-pro-preview` (preview). 2.5 models are restricted to previously-active users (not deprecated).
 - Google Search grounding, Gemini 3.x: 5,000 free search requests/month (shared), then $14 / 1,000, billed per search query the model executes. Gemini 2.5: 1,500 RPD free, then $35 / 1,000 grounded prompts.
 - URL context: no separate fee, retrieved content billed as input tokens.
+- **Flex tier (beta):** 50% off all prices; `service_tier: "flex"` as a top-level field on generateContent requests. Latency target 1–15 min; returns 429 (RESOURCE_EXHAUSTED) or 503 (overloaded) when no capacity, no auto-upgrade to standard tier.
+- **Batch API:** 50% off all prices; submit requests for async execution. Suitable for non-time-sensitive tasks.
 - Suggested: cheap = `gemini-3.1-flash-lite` (or `gemini-3.5-flash-lite`); mid = `gemini-3.8-flash`; pro = `gemini-3.1-pro-preview`.
+
+### Prompt caching
+- **Implicit:** on by default, no opt-in required.
+- **Minimum:** 4,096 tokens per cache on 3.8 / 3.6 Flash (exact minimum per model varies).
+- **Token tracking:** `usageMetadata.cachedContentTokenCount` on generateContent responses. LangChain SDK: `usage_metadata.input_token_details.cache_read`.
 
 ## Limits & gotchas
 - Limits are RPM, TPM, RPD per project, by tier: Free; Tier 1 (billing on); Tier 2 ($100+ spent, 3+ days); Tier 3 ($1,000+, 30+ days). Paid tiers also have rolling 10-minute spend caps ($10/$50/$200 for T1/T2/T3) that trigger 429. Per-model numbers are only in AI Studio (aistudio.google.com/rate-limit).

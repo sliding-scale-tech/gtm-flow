@@ -63,3 +63,25 @@ export function parseReviews(all: string | null | undefined): { stars: number; t
 export function clip(s: string | null | undefined, max: number): string {
   return String(s ?? "").slice(0, max).replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
 }
+
+/** Shrinks website text: strips md images/links, drops repeated lines (menus/footers) across pages. Keeps "### " headers. */
+export function trimSite(text: string): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of String(text ?? "").split("\n")) {
+    if (raw.startsWith("### ")) {
+      out.push(raw.trimEnd());
+      continue;
+    }
+    const line = raw
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .trim();
+    if (!line) continue;
+    const key = line.toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(line);
+  }
+  return out.join("\n");
+}

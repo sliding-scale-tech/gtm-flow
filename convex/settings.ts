@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { requireSession } from "./auth";
 import { DEFAULT_PROMPTS, DEFAULT_SETTINGS, PROMPT_KEYS, type PromptKey, type Settings } from "./defaults";
 
@@ -123,5 +123,31 @@ export const activatePrompt = mutation({
     await requireSession(ctx, token);
     for (const p of await ctx.db.query("prompts").withIndex("by_key", (q) => q.eq("key", key)).collect())
       await ctx.db.patch(p._id, { active: p.version === version });
+  },
+});
+
+const NEW_DENY = ["vacation home rental agency", "apartment rental agency", "property maintenance", "equipment rental agency",
+  "county government office", "housing development", "lodging", "tax assessor", "legal services", "forestry service",
+  "property investment company", "condominium rental agency"];
+
+/** One-off: bring saved settings in line with the new default deny/allow category lists. */
+export const addDenyCategories = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const doc = await ctx.db.query("settings").first();
+    const data = (doc?.data ?? {}) as Partial<Settings>;
+    const changed = { addedDeny: [] as string[], removedAllow: [] as string[] };
+    if (!doc) return changed;
+    const patch: Partial<Settings> = {};
+    if (Array.isArray(data.denyCategories)) {
+      changed.addedDeny = NEW_DENY.filter((c) => !data.denyCategories!.includes(c));
+      if (changed.addedDeny.length) patch.denyCategories = [...data.denyCategories, ...changed.addedDeny];
+    }
+    if (Array.isArray(data.allowCategories) && data.allowCategories.includes("apartment rental agency")) {
+      changed.removedAllow = ["apartment rental agency"];
+      patch.allowCategories = data.allowCategories.filter((c) => c !== "apartment rental agency");
+    }
+    if (Object.keys(patch).length) await ctx.db.patch(doc._id, { data: { ...data, ...patch } });
+    return changed;
   },
 });

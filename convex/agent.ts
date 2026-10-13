@@ -7,7 +7,8 @@ import * as z from "zod";
 import { failedGates } from "./lib/rules";
 import { splitName } from "./lib/text";
 import { exaSearch, exaSite } from "./providers/exa";
-import { clean, fill, SYSTEM } from "./providers/gemini";
+import { precheckRejects } from "./lib/precheck";
+import { clean, fill, gemini, SYSTEM } from "./providers/gemini";
 import { env, hash, isMock } from "./providers/http";
 import { fmtHits, reject, reviewSample, type Call, type StageCtx, type StageOut } from "./stageKit";
 
@@ -38,6 +39,20 @@ export async function research(c: StageCtx): Promise<StageOut> {
   const trace: Trace[] = [];
   const max = c.settings.agentMaxTools;
   const company = l.company || l.name;
+
+  if (c.settings.precheck && !isMock()) {
+    const r = await gemini<{ segment: string; confidence: number; reason: string }>({
+      tier: "fast", settings: c.settings, mockKey: "precheck", mockSeed: l.name,
+      prompt: fill(c.prompts.precheck, { name: company, category: l.category, site: clean(c.blob?.siteText, 6000) }),
+      schema: { type: "object", properties: { segment: { type: "string", enum: [...SEGMENTS] }, confidence: { type: "number" }, reason: { type: "string" } }, required: ["segment", "confidence", "reason"] },
+    });
+    calls.push({ provider: "gemini", costUsd: r.costUsd, ...(r.tokens ? { tokens: r.tokens } : {}) });
+    const pc = r.data;
+    if (precheckRejects(pc.segment, pc.confidence, c.settings.precheckMinConfidence)) {
+      const classify = { segment: pc.segment, isPropertyManager: pc.segment === "vacation", isIndependent: true, estSize: "unknown", confidence: pc.confidence, reasoning: pc.reason };
+      return reject(calls, `not_icp:${pc.segment}`, `precheck: ${pc.segment} (${pc.confidence}) ${pc.reason}`.slice(0, 300), { classify, agentTrace: [] });
+    }
+  }
 
   let out: Research;
   if (isMock()) out = mockResearch(company);
@@ -86,12 +101,19 @@ export async function research(c: StageCtx): Promise<StageOut> {
     const result: any = await agent.invoke({ messages: [{ role: "user", content: prompt }] }, { recursionLimit: 2 * max + 8 });
     let structured = result.structuredResponse as Research | undefined;
     const p = c.settings.prices;
-    const priceTokens = (msgs: any[]) => {
+    const priceTokens = (msgs: any[]): Call => {
+      const t = { in: 0, cached: 0, out: 0, think: 0 };
       let usd = 0;
-      for (const m of msgs) { const u = m?.usage_metadata; if (u) usd += ((u.input_tokens ?? 0) * p.smartIn + (u.output_tokens ?? 0) * p.smartOut) / 1e6; }
-      return usd;
+      for (const m of msgs) {
+        const u = m?.usage_metadata; if (!u) continue;
+        const cached = u.input_token_details?.cache_read ?? 0, think = u.output_token_details?.reasoning ?? 0; // LangChain output_tokens includes thoughts
+        const inn = Math.max(0, (u.input_tokens ?? 0) - cached), out = Math.max(0, (u.output_tokens ?? 0) - think);
+        usd += (inn * p.smartIn + cached * p.smartCached + (out + think) * p.smartOut) / 1e6;
+        t.in += inn; t.cached += cached; t.out += out; t.think += think;
+      }
+      return { provider: "gemini", costUsd: usd, tokens: t };
     };
-    calls.push({ provider: "gemini", costUsd: priceTokens(result.messages ?? []) });
+    calls.push(priceTokens(result.messages ?? []));
     if (!structured) {
       // Fallback: extract the answer from the transcript with one structured call.
       const fix: any = await model.withStructuredOutput(Out, { includeRaw: true }).invoke([
@@ -99,7 +121,7 @@ export async function research(c: StageCtx): Promise<StageOut> {
         { role: "user", content: "Give your final answer in the required structure now." },
       ]);
       structured = fix.parsed as Research;
-      calls.push({ provider: "gemini", costUsd: priceTokens([fix.raw]) });
+      calls.push(priceTokens([fix.raw]));
     }
     out = Out.parse(structured);
   }

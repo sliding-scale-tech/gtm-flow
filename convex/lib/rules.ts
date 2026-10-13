@@ -24,6 +24,10 @@ export function cleanRow(row: { name?: string; category?: string; open_state?: s
   if (chain) return { ok: false, reason: `chain:${chain}` };
 
   const cat = (row.category ?? "").toLowerCase();
+  // Vacation-rental operators are not the target, whatever Google files them under.
+  if (/vacation/i.test(name)) return { ok: false, reason: `category:${row.category}` };
+  // A deny entry equal to the whole category wins even over allow (e.g. "housing development" contains allow "housing").
+  if (s.denyCategories.some((d) => d && cat.trim() === d.toLowerCase())) return { ok: false, reason: `category:${row.category}` };
   const isBuilding = has(cat, s.buildingCategories);
   const allowed = !isBuilding && has(cat, s.allowCategories);
   if (!allowed && !isBuilding && has(cat, s.denyCategories)) return { ok: false, reason: `category:${row.category}` };

@@ -9,6 +9,7 @@ import { STAGES, type Stage } from "./lib/stageList";
 import type { StageOut } from "./stageKit";
 import { loadPrompts, loadSettings } from "./settings";
 import { cleanRow } from "./lib/rules";
+import { quotaError } from "./lib/quota";
 
 const LEASE_MS = 20 * 60 * 1000; // longer than any single batch
 const MAX_ATTEMPTS = 3;
@@ -127,6 +128,13 @@ export const apply = internalMutation({
           await ctx.db.patch(lead._id, { state: "blocked", lastError: r.error });
           continue;
         }
+        // Spending cap / credits gone: retrying only re-buys paid calls. Park the lead, pause the run now.
+        const quota = quotaError(r.error);
+        if (quota) {
+          await ctx.db.patch(lead._id, { state: "blocked", lastError: quota });
+          if ((await ctx.db.get(runId))?.status === "running") await ctx.db.patch(runId, { status: "paused", pauseReason: quota });
+          continue;
+        }
         const attempts = lead.attempts + 1;
         await ctx.db.patch(lead._id, { attempts, lastError: r.error.slice(0, 500), state: attempts >= MAX_ATTEMPTS ? "error" : "queued" });
         if (attempts >= MAX_ATTEMPTS) { bump(counts, "error"); bump(counts, "c:out:error", lead.costUsd + cost); }
@@ -184,6 +192,8 @@ export const finishIfIdle = internalMutation({
     if (busy || run?.status !== "running") return;
     const blocked = await ctx.db.query("leads").withIndex("by_run_state", (q) => q.eq("runId", runId).eq("state", "blocked")).take(5000);
     if (blocked.length) {
+      const quota = blocked.find((l) => l.lastError && quotaError(l.lastError))?.lastError;
+      if (quota) return await ctx.db.patch(runId, { status: "paused", pauseReason: quota });
       const keys = [...new Set(blocked.map((l) => l.lastError?.match(/(\w+) is not set/)?.[1]).filter(Boolean))].join(", ");
       await ctx.db.patch(runId, { status: "paused", pauseReason: `${blocked.length} lead(s) are waiting for ${keys}. Add it in Convex → Settings → Environment Variables, then Resume.` });
     } else await ctx.db.patch(runId, { status: "done", finishedAt: Date.now() });

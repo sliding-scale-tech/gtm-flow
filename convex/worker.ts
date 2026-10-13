@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { STAGES, type Stage } from "./lib/stageList";
+import { quotaError } from "./lib/quota";
 import { RUNNERS } from "./stages";
 import type { Call } from "./stageKit";
 
@@ -23,6 +24,7 @@ export const tick = internalAction({
     }
     // Each lead is saved the moment its stage finishes, so a crash/timeout mid-batch never loses finished work
     // (or its cost). Leads still unsaved stay "working" and the sweeper re-queues them.
+    let quotaHit = false;
     await Promise.all(batch.map(async ({ lead, blob, named }) => {
       const t0 = Date.now();
       const stage = lead.stage as Stage;
@@ -34,9 +36,11 @@ export const tick = internalAction({
         result = { leadId: lead._id, stage, ms: Date.now() - t0, out };
       } catch (e) {
         result = { leadId: lead._id, stage, ms: Date.now() - t0, calls, error: e instanceof Error ? e.message : String(e) };
+        if (quotaError(result.error)) quotaHit = true;
       }
       await ctx.runMutation(internal.pipeline.apply, { runId, results: [result] as any });
     }));
+    if (quotaHit) return; // apply already paused the run
     await ctx.scheduler.runAfter(0, internal.worker.tick, { runId });
   },
 });

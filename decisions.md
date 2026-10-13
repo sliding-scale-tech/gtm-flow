@@ -111,3 +111,12 @@ Newest at the bottom. Each entry: date · decision · why.
 ## 2026-10-13 — Retry failed leads from the run page (user)
 - Run page → "Why leads dropped" → the **Failed 3x (error)** line now has a **↻** button (`runs.retryFailed`). It puts that run's failed leads back in the queue **at the step that failed** (a lead's `stage` only changes when a step succeeds, so earlier results stay saved), resets their attempts, moves their cost out of the "error" bucket (so the Costs page doesn't count it twice) and starts the run again. Up to 1000 per click; press again for more. Refuses if the run already spent its budget.
 - Use case: update Gemini (key / model / quota), then press ↻ instead of re-importing the file.
+
+## 2026-10-13 — Cost cuts Phase A (user, deployment pending)
+- **Analysis of 1,097 real research runs + 4,756 leads:**
+  - (1) **Quota/credit errors now block instead of retry.** Gemini's "monthly spending cap" and Exa HTTP 402 (credits exhausted) previously triggered retries, re-buying Exa searches ($3.40 wasted on FL.csv). Now: lead becomes `blocked` and run pauses. Resume after raising the cap / adding credits. User must manually press Retry.
+  - (2) **New free deny categories** (exact whole-category match beats allow list): vacation home rental agency, apartment rental agency, property maintenance, equipment rental agency, county government office, housing development, lodging, tax assessor, legal services, forestry service, property investment company, condominium rental agency. Also: business name containing "vacation" → rejected free. In live data: −10.9% spend, 0 usable emails lost. One-off setup: `npx convex run settings:addDenyCategories` on dev and prod.
+  - (3) **Website text trimmed** (repeated menu/footer lines across subpages, link URLs, images dropped) → −16% chars to the agent, reducing token spend.
+  - (4) **Gemini tokens logged per call:** in/cached/out/think. Cached tokens priced at the cached rate ($0.075/1M cached input on 3.8 Flash through Dec 31 2026; rate doubles after).
+- **Rejected:** agent tools 4→2 (cost benefit is marginal: 3–4-tool leads give extra usable emails at ~$0.15 each, below the $0.22 average per lead); Gemini Flex tier (1–15 min latency adds complexity); agent on flash-lite (quality drops).
+- **Phase B pending user approval:** Exa instant vs auto search test (~$0.45), pre-check prompt test (~$0.25).

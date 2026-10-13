@@ -4,6 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import type { PromptKey, Settings } from "./defaults";
 import { isBadHost, parseReviews, rootDomain } from "./lib/text";
 import { research } from "./agent";
+import { domainSearchAllowed } from "./lib/precheck";
 import { asEmail, bouncerVerify, findymailFind, trykittFind, trykittVerify, type EmailStatus } from "./providers/email";
 import { exaSearch, exaSite, type ExaHit } from "./providers/exa";
 import { clean, fill, gemini, type Tier } from "./providers/gemini";
@@ -19,6 +20,7 @@ async function domain(c: StageCtx): Promise<StageOut> {
   const fromCsv = rootDomain(c.lead.website);
   if (fromCsv && !isBadHost(fromCsv)) return { patch: { domain: fromCsv, domainSource: "csv" }, next: "site", calls, summary: `csv: ${fromCsv}` };
 
+  if (!domainSearchAllowed(c.lead.category, c.settings.domainSearchCategories)) return reject(calls, "no_domain", "skipped search (category)");
   const q = `"${c.lead.name}" ${c.lead.county} ${c.lead.usState} property management`;
   const { hits } = track("exa", await exaSearch(q, c.settings, { numResults: 6 }));
   const out = await ai<{ domain: string; confidence: number; reason: string }>("domain", "fast",

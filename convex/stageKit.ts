@@ -6,7 +6,7 @@ import { parseReviews } from "./lib/text";
 import type { ExaHit } from "./providers/exa";
 import { fill, gemini, type Tier } from "./providers/gemini";
 
-export type Call = { provider: string; costUsd: number };
+export type Call = { provider: string; costUsd: number; tokens?: { in: number; cached: number; out: number; think: number } };
 export type StageOut = {
   patch: Partial<Doc<"leads">>;
   blob?: { siteText?: string; evidence?: string };
@@ -39,7 +39,7 @@ export function helpers(c: StageCtx) {
   };
   const ai = async <T,>(key: PromptKey, tier: Tier, extra: Record<string, string>, schema?: object, tools?: object[]) => {
     const r = await gemini<T>({ tier, settings: c.settings, prompt: fill(c.prompts[key], { ...vars, ...extra }), schema, tools, mockKey: key, mockSeed: c.lead.name });
-    calls.push({ provider: "gemini", costUsd: r.costUsd });
+    calls.push({ provider: "gemini", costUsd: r.costUsd, ...(r.tokens ? { tokens: r.tokens } : {}) });
     return r.data;
   };
   const track = <T extends { costUsd: number }>(provider: string, r: T) => { calls.push({ provider, costUsd: r.costUsd }); return r; };

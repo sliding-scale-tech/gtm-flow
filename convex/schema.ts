@@ -114,7 +114,7 @@ export default defineSchema({
     ok: v.boolean(),
     ms: v.number(),
     costUsd: v.number(),
-    calls: v.array(v.object({ provider: v.string(), costUsd: v.number(), credits: v.optional(v.number()) })),
+    calls: v.array(v.object({ provider: v.string(), costUsd: v.number(), credits: v.optional(v.number()), tokens: v.optional(v.object({ in: v.number(), cached: v.number(), out: v.number(), think: v.number() })) })),
     summary: v.string(),
     error: v.optional(v.string()),
   }).index("by_lead", ["leadId"]),

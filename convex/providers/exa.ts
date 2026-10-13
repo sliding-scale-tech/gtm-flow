@@ -1,5 +1,6 @@
 import type { Settings } from "../defaults";
 import { env, fail, hash, http, isMock } from "./http";
+import { trimSite } from "../lib/text";
 
 export type ExaHit = { title: string; url: string; text: string };
 const headers = () => ({ "x-api-key": env("EXA_API_KEY"), "Content-Type": "application/json" });
@@ -11,7 +12,7 @@ export async function exaSearch(
   const r = await http("https://api.exa.ai/search", {
     method: "POST", headers: headers(),
     body: JSON.stringify({
-      query, type: "auto", numResults: opts.numResults ?? 5,
+      query, type: s.exaSearchType, numResults: opts.numResults ?? 5,
       ...(opts.category ? { category: opts.category } : {}),
       contents: { text: { maxCharacters: opts.maxChars ?? 1200 } },
     }),
@@ -41,5 +42,5 @@ export async function exaSite(url: string, s: Settings): Promise<{ text: string;
     if (res.text) parts.push(`### ${res.url}\n${res.text}`);
     for (const sp of res.subpages ?? []) if (sp.text) parts.push(`### ${sp.url}\n${sp.text}`);
   }
-  return { text: parts.join("\n\n"), costUsd: r.body.costDollars?.total ?? s.prices.exaPage * (1 + 4) };
+  return { text: trimSite(parts.join("\n\n")), costUsd: r.body.costDollars?.total ?? s.prices.exaPage * (1 + 4) };
 }

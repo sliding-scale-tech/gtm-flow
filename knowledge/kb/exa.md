@@ -28,10 +28,10 @@ Response:
 ```
 Response: `{requestId, results[], statuses:[{id, status:"success"|"error", source:"cached"|"crawled", error:{tag, httpStatusCode}}], costDollars, searchTime}`. Per-URL failures appear in `statuses`, not as HTTP errors: always check `statuses`.
 
-## Pricing (exa.ai/pricing)
-- Search: instant $4/1k; fast/auto $7/1k; deep $12-15/1k. 10 results included; beyond that $1/1k results.
+## Pricing (re-checked 2026-10-13, exa.ai/pricing)
+- Search: instant $4/1k; fast/auto $7/1k; deep $12–15/1k. 10 results included; beyond that $1/1k results.
 - Contents: $1/1k pages. Summaries add $1/1k pages. Answer $5/1k. Free tier: $10 credits/month.
-- Actual cost is in `costDollars` on /search and /contents responses (documented in both schemas). The example numbers above are placeholders.
+- Actual cost is in `costDollars` on /search and /contents responses (documented in both schemas). Live observation: auto search with 5 text results = $0.007 flat.
 
 ## Limits & gotchas
 - QPS per team (all keys): /search 10, deep variants 5, /contents 100. 429 -> honor `Retry-After` if present, else exponential backoff. Adding $1,000 credits within 30 days gives 25 QPS for 90 days.

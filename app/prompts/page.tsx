@@ -9,7 +9,7 @@ import { Badge, Button, Card, ErrorText, Input, Label, PageHeader, Spinner, Text
 const NAMES: Record<string, string> = {
   domain: "Pick official website", building_check: "Apartment / building check", research: "Research agent (ICP + owner + go/no-go)",
   review_line: "Review-based first line", description: "Website description", service_label: "Primary service label",
-  campaign_vars: "Campaign variables", site_read: "Website reader (fallback)",
+  campaign_vars: "Campaign variables", site_read: "Website reader (fallback)", precheck: "Pre-check (cheap ICP filter)",
 };
 const PLACEHOLDERS = ["name", "company", "building_note", "max_tools", "category", "city", "state", "phone", "domain", "site", "reviews", "evidence", "results", "summary", "variables", "url"];
 

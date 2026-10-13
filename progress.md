@@ -8,6 +8,9 @@
 - Live test with real Gemini + Exa: 9-row WV test run → clean rules, chain, place_id + domain dedupe, domain via Exa, site read, ICP classify, owner found (Blackwell PM → Patrick Blood, Founder), go decision; leads then wait for FINDYMAIL_API_KEY as designed. Total spend $0.083.
 
 ## Pending / reminders
+- [x] Phase A (cost cuts): quota/credit error handling, deny categories, website text trimming, token logging. [ ] Deploy to prod + run `npx convex run settings:addDenyCategories` on dev and prod.
+- [x] Phase B analysis scoped: Exa instant vs auto test (~$0.45), pre-check prompt test (~$0.25). [ ] User approval needed before running Phase B tests.
+- **FL.csv run errors:** Gemini spending cap hit, Exa credits exhausted. Leads are blocked. User must raise Gemini monthly spending cap / add Exa credits, then press **Retry** on the run page.
 - [x] TryKitt + Instantly live (2 valid emails found on real leads). [ ] Add FINDYMAIL_API_KEY → Resume: Broad Management + Park Place go straight to Findymail (TryKitt step saved, not re-paid).
 - [x] Google Drive connected — NEW folder 1nMVri2… → by_state (52 CSVs, 107,257 rows total; identical to property_managers.csv). Delete the local `google-service-account.json` copy (gitignored).
 - [x] LangGraph research agent live (VA/TX tests: correct rejections, owners found with LinkedIn, ~$0.003–0.03 per lead).
