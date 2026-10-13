@@ -22,3 +22,4 @@
 - [ ] Vercel deploy: build command `npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL`, env CONVEX_DEPLOY_KEY; set the same Convex env vars on the prod deployment.
 - [ ] Prices in Settings: confirm Findymail and Instantly per-credit cost for the user's plans (defaults are estimates).
 - [ ] After a 5k run: compare emails/5k vs the 1,000 target and tune gates.
+- [x] Cost cuts 2 (2026-10-13): research agent trimmed (~$0.028 -> ~$0.020/lead), eval pricing fix, `evalsNode:exaType` test run (instant ~equal to auto on owner hits, $0.004 vs $0.007/call). [ ] User decides whether to switch `exaSearchType` to `instant`. Flash-lite agent and pre-check rejected (see decisions.md).

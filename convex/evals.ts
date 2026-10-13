@@ -92,3 +92,58 @@ export const precheck = internalAction({
     };
   },
 });
+
+/** Agent-model A/B candidates: researched leads with site text. ~60% reached find_email (usable first), ~40% agent not_icp/no_owner rejects. Deterministic order. */
+export const agentModelCandidates = internalQuery({
+  args: { n: v.number() },
+  handler: async (ctx, { n }) => {
+    const wantPass = Math.round(n * 0.6), wantRej = n - wantPass;
+    const usable: any[] = [], otherPass: any[] = [], rejs: any[] = [];
+    for await (const l of ctx.db.query("leads").withIndex("by_state", (q) => q.eq("state", "done"))) {
+      if (!l.classify || l.decision?.decision !== "find_email") continue;
+      (l.emailStatus === "valid" || l.emailStatus === "catch_all" ? usable : otherPass).push(l);
+      if (usable.length + otherPass.length >= n * 3) break;
+    }
+    for await (const l of ctx.db.query("leads").withIndex("by_state", (q) => q.eq("state", "rejected"))) {
+      if (!l.classify) continue;
+      const r = l.rejectReason ?? "";
+      if (l.decision?.decision === "find_email") otherPass.push(l);
+      else if (r.startsWith("not_icp") || r === "no_owner") rejs.push(l);
+      if (rejs.length >= n * 3) break;
+    }
+    const passes = [...usable.slice(0, Math.ceil(wantPass / 2)), ...otherPass, ...usable.slice(Math.ceil(wantPass / 2))].slice(0, wantPass);
+    const order = [...passes.map((l) => [l, "pass"] as const), ...rejs.slice(0, wantRej + 5).map((l) => [l, "reject"] as const)];
+    const out: { lead: any; blob: any; kind: string }[] = [];
+    let rejTaken = 0, passTaken = 0;
+    for (const [l, kind] of order) {
+      if (out.length >= n) break;
+      if (kind === "reject" && rejTaken >= wantRej + Math.max(0, wantPass - passTaken)) continue;
+      const blob = await ctx.db.query("leadBlobs").withIndex("by_lead", (q) => q.eq("leadId", l._id)).unique();
+      if (!blob?.siteText) continue;
+      if (kind === "pass") passTaken++; else rejTaken++;
+      out.push({ lead: l, blob: { siteText: blob.siteText, evidence: blob.evidence }, kind });
+    }
+    return out;
+  },
+});
+
+// Leads that passed research with an owner and have a stored successful search query (for the Exa type test).
+export const exaTypeCandidates = internalQuery({
+  args: { n: v.number() },
+  handler: async (ctx, { n }) => {
+    const out: { company: string; domain: string; last: string; tool: string; query: string }[] = [];
+    for await (const l of ctx.db.query("leads").withIndex("by_state", (q) => q.eq("state", "done"))) {
+      const last = l.owner?.lastName?.trim();
+      if (!last || !l.agentTrace) continue;
+      for (const t of l.agentTrace) {
+        if (!t.ok || (t.tool !== "web_search" && t.tool !== "search_people")) continue;
+        let q = ""; try { q = JSON.parse(t.input)?.query ?? ""; } catch { /* truncated input */ }
+        if (!q) continue;
+        out.push({ company: l.company || l.name, domain: (l.domain ?? "").toLowerCase(), last, tool: t.tool, query: q });
+        break;
+      }
+      if (out.length >= n) break;
+    }
+    return out;
+  },
+});

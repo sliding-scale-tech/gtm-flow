@@ -10,7 +10,7 @@ import { exaSearch, exaSite } from "./providers/exa";
 import { precheckRejects } from "./lib/precheck";
 import { clean, fill, gemini, SYSTEM } from "./providers/gemini";
 import { env, hash, isMock } from "./providers/http";
-import { fmtHits, reject, reviewSample, type Call, type StageCtx, type StageOut } from "./stageKit";
+import { fmtHits, reject, type Call, type StageCtx, type StageOut } from "./stageKit";
 
 const SEGMENTS = ["residential", "hoa", "commercial", "vacation", "trade_service", "real_estate_sales", "other"] as const;
 
@@ -67,20 +67,20 @@ export async function research(c: StageCtx): Promise<StageOut> {
     };
     const tools = [
       tool(guarded("web_search", async ({ query }: { query: string }) => {
-        const r = await exaSearch(query, c.settings, { numResults: 5, maxChars: 900 });
+        const r = await exaSearch(query, c.settings, { numResults: 5, maxChars: 600 });
         calls.push({ provider: "exa", costUsd: r.costUsd });
-        return clean(fmtHits(r.hits), 6000) || "No results.";
+        return clean(fmtHits(r.hits), 3000) || "No results.";
       }), { name: "web_search", description: "Search the web. Use for the company's owner/founder, news, BBB or state business records.", schema: z.object({ query: z.string() }) }),
       tool(guarded("search_people", async ({ query }: { query: string }) => {
-        const r = await exaSearch(query, c.settings, { numResults: 5, maxChars: 700, category: "people" });
+        const r = await exaSearch(query, c.settings, { numResults: 5, maxChars: 500, category: "people" });
         calls.push({ provider: "exa", costUsd: r.costUsd });
-        return clean(fmtHits(r.hits), 6000) || "No results.";
+        return clean(fmtHits(r.hits), 3000) || "No results.";
       }), { name: "search_people", description: "Search people profiles (e.g. LinkedIn) — e.g. '<company> owner <city>'.", schema: z.object({ query: z.string() }) }),
       tool(guarded("read_page", async ({ url }: { url: string }) => {
         if (!/^https:\/\//i.test(url)) return "Only https:// URLs can be read.";
         const r = await exaSite(url, c.settings);
         calls.push({ provider: "exa", costUsd: r.costUsd });
-        return clean(r.text, 8000) || "Page could not be read.";
+        return clean(r.text, 5000) || "Page could not be read.";
       }), { name: "read_page", description: "Read one web page (and a few of its subpages) as text.", schema: z.object({ url: z.string() }) }),
     ];
 
@@ -95,7 +95,7 @@ export async function research(c: StageCtx): Promise<StageOut> {
       : "";
     const prompt = fill(c.prompts.research, {
       company, category: l.category, city: l.county, state: l.usState, domain: l.domain, building_note: buildingNote,
-      max_tools: max, site: clean(c.blob?.siteText, 12000), reviews: clean(reviewSample(l.reviews), 2500),
+      max_tools: max, site: clean(c.blob?.siteText, 12000),
     });
 
     const result: any = await agent.invoke({ messages: [{ role: "user", content: prompt }] }, { recursionLimit: 2 * max + 8 });

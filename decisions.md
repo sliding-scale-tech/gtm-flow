@@ -120,3 +120,10 @@ Newest at the bottom. Each entry: date · decision · why.
   - (4) **Gemini tokens logged per call:** in/cached/out/think. Cached tokens priced at the cached rate ($0.075/1M cached input on 3.8 Flash through Dec 31 2026; rate doubles after).
 - **Rejected:** agent tools 4→2 (cost benefit is marginal: 3–4-tool leads give extra usable emails at ~$0.15 each, below the $0.22 average per lead); Gemini Flex tier (1–15 min latency adds complexity); agent on flash-lite (quality drops).
 - **Phase B pending user approval:** Exa instant vs auto search test (~$0.45), pre-check prompt test (~$0.25).
+
+## 2026-10-13 — Cost cuts 2: trimmed research agent, eval tools, Exa type test (user)
+- **Research agent trimmed:** customer reviews removed from the prompt; tool outputs capped at 3000 chars (search) / 5000 chars (read_page). 25-lead check vs stored results: 23/25 same verdict, 14/15 same owner, cost ~$0.028 -> ~$0.020 per lead.
+- **Rejected: flash-lite as the research agent** — lost 3/15 good leads and picked 1 wrong owner, though 77% cheaper.
+- **Rejected: pre-check (cheap Gemini gate before the agent)** — at threshold 0.85 it wrongly rejected 10/150 usable leads.
+- **Eval tooling:** `evalsNode:agentModel` now prices at fast-tier rates only when the requested model equals `settings.models.fast` (before, it always did, understating smart-model cost). New `evalsNode:exaType` re-runs each lead's first stored successful search query with Exa `auto` vs `instant` (paid, writes nothing, $1 cap).
+- **Exa instant vs auto result (40 leads, $0.44 spent):** owner last name in results: auto 29/40 (72.5%), instant 28/40 (70%); lead domain in result URLs: auto 22/40 (55%), instant 24/40 (60%); cost per call: auto $0.007, instant $0.004 (~43% cheaper). Auto hit but instant missed on 3 owners (Rock Solid Properties, The Hodges Companies, KL Real Estate Services). Instant is a viable saving, but `exaSearchType` is left on `auto` in live settings until the user decides.

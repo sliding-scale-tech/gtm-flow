@@ -14,6 +14,7 @@ import type * as costs from "../costs.js";
 import type * as crons from "../crons.js";
 import type * as defaults from "../defaults.js";
 import type * as evals from "../evals.js";
+import type * as evalsNode from "../evalsNode.js";
 import type * as ingest from "../ingest.js";
 import type * as leads from "../leads.js";
 import type * as lib_costModel from "../lib/costModel.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   defaults: typeof defaults;
   evals: typeof evals;
+  evalsNode: typeof evalsNode;
   ingest: typeof ingest;
   leads: typeof leads;
   "lib/costModel": typeof lib_costModel;
