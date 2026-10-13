@@ -34,7 +34,7 @@ export const DEFAULT_SETTINGS = {
   buildingCategories: ["apartment complex", "apartment building", "condominium complex", "townhouse complex", "housing complex"],
   // Domain search (paid Exa) when the CSV has no website: only for these categories (lowercase substrings)
   domainSearchCategories: ["property management", "homeowners", "condominium", "community association", "hoa"],
-  exaSearchType: "auto", // Exa search `type`
+  exaSearchType: "instant", // Exa search `type`
   // Cheap pre-check (fast model) before the research agent: rejects clear non-ICP segments
   precheck: false,
   precheckMinConfidence: 0.85,
@@ -53,7 +53,7 @@ export const DEFAULT_SETTINGS = {
   prices: {
     fastIn: 0.25, fastOut: 1.5, smartIn: 0.75, smartOut: 3.75,
     smartCached: 0.075, fastCached: 0.025, // cached-input $/1M tokens
-    exaSearch: 0.007, exaPage: 0.001,
+    exaSearch: 0.004, exaPage: 0.001,
     findymailFound: 0.05, bouncerVerify: 0.008, // bouncerVerify = estimate (1 credit); edit in Settings
     trykittFound: 0.005, trykittVerify: 0.0015, instantlyVerify: 0.005,
   },
